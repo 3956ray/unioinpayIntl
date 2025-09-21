@@ -158,7 +158,7 @@
 
 ### 开发优先级建议
 
-1. **第一阶段**: Solidity + Hardhat + Geth + Spring Boot + PostgreSQL
+1. **第一阶段**: Solidity + Hardhat + Geth + Spring Boot + PostgreSQL（JDK 17 + Web3j 4.12.x + Spring Boot 3.2.x/3.3.x）
 2. **第二阶段**: React + Web3j + Redis + Kafka
 3. **第三阶段**: 监控工具 + 安全审计 + 移动端开发
 4. **第四阶段**: 合规工具集成 + 生产环境优化
