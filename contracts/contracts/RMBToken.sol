@@ -44,9 +44,9 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
     
     // ============ 修饰符 ============
     
-    /// @dev 仅铸造者可调用
+    /// @dev 仅铸造者可调用（Owner自动拥有铸造权限）
     modifier onlyMinter() {
-        require(minters[msg.sender], "RMBToken: caller is not a minter");
+        require(minters[msg.sender] || msg.sender == owner(), "RMBToken: caller is not a minter");
         _;
     }
     
@@ -170,6 +170,7 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
         notZeroAddress(minter)
     {
         require(!minters[minter], "RMBToken: address is already a minter");
+        require(minter != owner(), "RMBToken: owner is automatically a minter");
         
         minters[minter] = true;
         emit MinterAdded(minter);
@@ -185,18 +186,48 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
         notZeroAddress(minter)
     {
         require(minters[minter], "RMBToken: address is not a minter");
+        require(minter != owner(), "RMBToken: cannot remove owner from minters");
         
         minters[minter] = false;
         emit MinterRemoved(minter);
     }
     
     /**
-     * @dev 检查是否为铸造者
+     * @dev 检查是否为铸造者（Owner自动拥有铸造权限）
      * @param account 待检查地址
      * @return 是否为铸造者
      */
     function isMinter(address account) external view returns (bool) {
-        return minters[account];
+        return minters[account] || account == owner();
+    }
+    
+    /**
+     * @dev 获取所有铸造者数量
+     * @return 铸造者数量
+     */
+    function getMinterCount() external view returns (uint256) {
+        // 注意：这个函数只是示例，实际实现需要维护铸造者列表
+        // 在MVP版本中，我们简化实现
+        return 0; // 占位符，实际应该维护铸造者数组
+    }
+    
+    /**
+     * @dev 批量添加铸造者（仅Owner）
+     * @param minters_ 铸造者地址数组
+     */
+    function addMinters(address[] calldata minters_) 
+        external 
+        onlyOwner 
+    {
+        for (uint256 i = 0; i < minters_.length; i++) {
+            address minter = minters_[i];
+            require(minter != address(0), "RMBToken: zero address");
+            require(!minters[minter], "RMBToken: address is already a minter");
+            require(minter != owner(), "RMBToken: owner is automatically a minter");
+            
+            minters[minter] = true;
+            emit MinterAdded(minter);
+        }
     }
     
     // ============ 紧急控制功能 ============
