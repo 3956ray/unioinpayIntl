@@ -1,57 +1,152 @@
-# Sample Hardhat 3 Beta Project (`node:test` and `viem`)
+# RMB 稳定币合约 (RMBTokenV1)
 
-This project showcases a Hardhat 3 Beta project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+基于 USDC 设计模式的人民币稳定币智能合约，采用可升级代理模式实现。
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## 功能特性
 
-## Project Overview
+### 核心功能
+- **ERC20 标准**: 完全兼容 ERC20 代币标准
+- **EIP-2612 Permit**: 支持无 gas 授权功能
+- **可升级性**: 采用 UUPS 代理模式，支持合约升级
+- **角色管理**: 基于 OpenZeppelin AccessControl 的细粒度权限控制
 
-This example project includes:
+### 合规功能
+- **暂停机制**: 紧急情况下可暂停所有转账操作
+- **黑名单管理**: 支持单个和批量黑名单操作
+- **受控铸币**: 只有授权角色可以铸造代币
+- **受控销毁**: 支持强制销毁和用户自愿销毁
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+### 供应量控制
+- **最大供应量**: 可设置代币最大供应量上限
+- **供应量开关**: 可启用/禁用供应量限制
 
-## Usage
+### 安全功能
+- **资产找回**: 可找回误转到合约的 ERC20 代币和 ETH
+- **升级授权**: 只有授权角色可以升级合约
 
-### Running Tests
+## 角色说明
 
-To run all the tests in the project, execute the following command:
+| 角色 | 权限 | 说明 |
+|------|------|------|
+| `DEFAULT_ADMIN_ROLE` | 管理所有角色 | 超级管理员，可以授予/撤销其他角色 |
+| `PAUSER_ROLE` | 暂停/恢复合约 | 紧急情况下暂停合约操作 |
+| `MINTER_ROLE` | 铸造代币 | 铸造新的代币到指定地址 |
+| `BURNER_ROLE` | 销毁代币 | 强制销毁指定地址的代币 |
+| `BLACKLISTER_ROLE` | 黑名单管理 | 添加/移除黑名单地址 |
+| `RESCUER_ROLE` | 资产找回 | 找回误转到合约的资产 |
+| `UPGRADER_ROLE` | 合约升级 | 升级合约实现 |
 
-```shell
+## 部署和使用
+
+### 环境要求
+
+```bash
+# 安装依赖
+npm install
+
+# 编译合约
+npx hardhat compile
+
+# 运行测试
 npx hardhat test
 ```
 
-You can also selectively run the Solidity or `node:test` tests:
+### 部署合约
 
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
+```bash
+# 部署到本地网络
+npx hardhat run scripts/deploy-rmb-token.ts --network localhost
+
+# 部署到测试网
+npx hardhat run scripts/deploy-rmb-token.ts --network sepolia
 ```
 
-### Make a deployment to Sepolia
+### 合约初始化
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+```solidity
+// 初始化合约
+function initialize(
+    address admin,      // 管理员地址
+    string memory name, // 代币名称，如 "RMB Stablecoin"
+    string memory symbol // 代币符号，如 "RMB"
+) public initializer
 ```
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+### 基本操作示例
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+```javascript
+// 设置角色
+await rmbToken.setupRoles(
+    adminAddress,
+    pauserAddress,
+    minterAddress,
+    blacklisterAddress,
+    rescuerAddress,
+    upgraderAddress,
+    burnerAddress
+);
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+// 铸造代币
+await rmbToken.connect(minter).mint(userAddress, ethers.parseUnits("1000", 6));
 
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
+// 设置黑名单
+await rmbToken.connect(blacklister).setBlacklisted(badActorAddress, true);
+
+// 设置供应量上限
+await rmbToken.setMaxSupply(ethers.parseUnits("1000000000", 6)); // 10亿 RMB
+await rmbToken.toggleSupplyCap(true);
+
+// 暂停合约
+await rmbToken.connect(pauser).pause();
 ```
 
-After setting the variable, you can run the deployment with the Sepolia network:
+## 安全考虑
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
+### 生产环境建议
+
+1. **多签钱包**: 所有关键角色应使用多签钱包
+2. **时间锁**: 升级操作应添加时间锁延迟
+3. **审计**: 部署前进行专业安全审计
+4. **监控**: 部署监控系统跟踪关键操作
+5. **应急预案**: 制定紧急情况处理流程
+
+### 权限分离
+
+- 不同角色应分配给不同的地址
+- 避免单点故障
+- 定期轮换密钥
+- 使用硬件钱包存储私钥
+
+## 合约信息
+
+- **Solidity 版本**: ^0.8.20
+- **代币精度**: 6 位小数（与 USDC 一致）
+- **代理模式**: UUPS (Universal Upgradeable Proxy Standard)
+- **依赖库**: OpenZeppelin Contracts Upgradeable v5.4.0
+
+## 测试
+
+合约包含完整的测试套件，覆盖以下场景：
+
+- 部署和初始化
+- 铸币和销毁
+- 转账和授权
+- 黑名单功能
+- 暂停机制
+- 供应量控制
+- 角色管理
+- 升级功能
+
+运行测试：
+
+```bash
+npx hardhat test
 ```
+
+## 许可证
+
+MIT License
+
+## 免责声明
+
+此合约仅供教学和参考使用，未经过专业安全审计。在生产环境中使用前，请务必进行全面的安全审计和测试。
