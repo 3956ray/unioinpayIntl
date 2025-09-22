@@ -1,152 +1,157 @@
-# RMB 稳定币合约 (RMBTokenV1)
+# EscrowContract - 去中心化托管合约
 
-基于 USDC 设计模式的人民币稳定币智能合约，采用可升级代理模式实现。
+基于Coinbase Commerce Payments Protocol的去中心化托管合约，为电商支付提供安全的资金托管服务，实现用户无Gas费的支付体验。
 
 ## 功能特性
 
 ### 核心功能
-- **ERC20 标准**: 完全兼容 ERC20 代币标准
-- **EIP-2612 Permit**: 支持无 gas 授权功能
-- **可升级性**: 采用 UUPS 代理模式，支持合约升级
-- **角色管理**: 基于 OpenZeppelin AccessControl 的细粒度权限控制
+- **支付授权**: 使用EIP-712签名验证用户支付意图
+- **Permit2集成**: 实现无Gas费的代币授权和转移
+- **支付捕获**: 商家确认后将托管资金转给收款方
+- **退款处理**: 支持手动退款和自动过期退款
+- **操作员管理**: 灵活的权限管理系统
 
-### 合规功能
-- **暂停机制**: 紧急情况下可暂停所有转账操作
-- **黑名单管理**: 支持单个和批量黑名单操作
-- **受控铸币**: 只有授权角色可以铸造代币
-- **受控销毁**: 支持强制销毁和用户自愿销毁
+### 安全特性
+- **重入保护**: 防止重入攻击
+- **暂停机制**: 紧急情况下可暂停合约
+- **访问控制**: 基于角色的权限管理
+- **签名验证**: EIP-712结构化数据签名
+- **过期保护**: 自动处理过期支付
 
-### 供应量控制
-- **最大供应量**: 可设置代币最大供应量上限
-- **供应量开关**: 可启用/禁用供应量限制
+## 合约架构
 
-### 安全功能
-- **资产找回**: 可找回误转到合约的 ERC20 代币和 ETH
-- **升级授权**: 只有授权角色可以升级合约
+### 核心数据结构
 
-## 角色说明
+```solidity
+// 支付意图
+struct PaymentIntent {
+    address payer;      // 付款方
+    address payee;      // 收款方
+    address token;      // 代币地址
+    uint256 amount;     // 支付金额
+    uint256 expiryTime; // 过期时间
+    bytes32 intentHash; // 意图哈希
+    uint256 nonce;      // 防重放随机数
+}
 
-| 角色 | 权限 | 说明 |
-|------|------|------|
-| `DEFAULT_ADMIN_ROLE` | 管理所有角色 | 超级管理员，可以授予/撤销其他角色 |
-| `PAUSER_ROLE` | 暂停/恢复合约 | 紧急情况下暂停合约操作 |
-| `MINTER_ROLE` | 铸造代币 | 铸造新的代币到指定地址 |
-| `BURNER_ROLE` | 销毁代币 | 强制销毁指定地址的代币 |
-| `BLACKLISTER_ROLE` | 黑名单管理 | 添加/移除黑名单地址 |
-| `RESCUER_ROLE` | 资产找回 | 找回误转到合约的资产 |
-| `UPGRADER_ROLE` | 合约升级 | 升级合约实现 |
+// 托管记录
+struct EscrowRecord {
+    address payer;      // 付款方
+    address payee;      // 收款方
+    address token;      // 代币地址
+    uint256 amount;     // 托管金额
+    uint256 createdAt;  // 创建时间
+    uint256 expiryTime; // 过期时间
+    Status status;      // 托管状态
+    address operator;   // 操作员
+}
+```
 
-## 部署和使用
+### 状态枚举
 
-### 环境要求
+```solidity
+enum Status {
+    NONE,       // 不存在
+    AUTHORIZED, // 已授权
+    CAPTURED,   // 已捕获
+    REFUNDED,   // 已退款
+    EXPIRED     // 已过期
+}
+```
+
+## 主要函数
+
+### 支付流程
+
+1. **支付授权**
+```solidity
+function authorizePaymentWithPermit2(
+    PaymentIntent calldata intent,
+    bytes calldata intentSignature,
+    IPermit2.PermitTransferFrom calldata permit,
+    bytes calldata permitSignature
+) external;
+```
+
+2. **支付捕获**
+```solidity
+function capturePayment(bytes32 intentHash) external;
+```
+
+3. **退款处理**
+```solidity
+function refundPayment(
+    bytes32 intentHash,
+    string calldata reason
+) external;
+
+function autoRefundExpired(bytes32 intentHash) external;
+```
+
+### 管理功能
+
+```solidity
+// 操作员管理
+function registerOperator(address operator, string calldata name) external;
+function removeOperator(address operator) external;
+
+// 代币管理
+function setTokenSupport(address token, bool supported) external;
+
+// 紧急控制
+function pause() external;
+function unpause() external;
+function emergencyWithdraw(address token, address to, uint256 amount) external;
+```
+
+## 部署和测试
+
+### 安装依赖
 
 ```bash
-# 安装依赖
 npm install
+```
 
-# 编译合约
+### 编译合约
+
+```bash
 npx hardhat compile
+```
 
-# 运行测试
+### 运行测试
+
+```bash
 npx hardhat test
 ```
 
 ### 部署合约
 
 ```bash
-# 部署到本地网络
-npx hardhat run scripts/deploy-rmb-token.ts --network localhost
+# 本地测试网络
+npx hardhat run scripts/deploy.js --network localhost
 
-# 部署到测试网
-npx hardhat run scripts/deploy-rmb-token.ts --network sepolia
+# 主网部署
+npx hardhat run scripts/deploy.js --network mainnet
 ```
 
-### 合约初始化
+## 项目结构
 
-```solidity
-// 初始化合约
-function initialize(
-    address admin,      // 管理员地址
-    string memory name, // 代币名称，如 "RMB Stablecoin"
-    string memory symbol // 代币符号，如 "RMB"
-) public initializer
 ```
-
-### 基本操作示例
-
-```javascript
-// 设置角色
-await rmbToken.setupRoles(
-    adminAddress,
-    pauserAddress,
-    minterAddress,
-    blacklisterAddress,
-    rescuerAddress,
-    upgraderAddress,
-    burnerAddress
-);
-
-// 铸造代币
-await rmbToken.connect(minter).mint(userAddress, ethers.parseUnits("1000", 6));
-
-// 设置黑名单
-await rmbToken.connect(blacklister).setBlacklisted(badActorAddress, true);
-
-// 设置供应量上限
-await rmbToken.setMaxSupply(ethers.parseUnits("1000000000", 6)); // 10亿 RMB
-await rmbToken.toggleSupplyCap(true);
-
-// 暂停合约
-await rmbToken.connect(pauser).pause();
-```
-
-## 安全考虑
-
-### 生产环境建议
-
-1. **多签钱包**: 所有关键角色应使用多签钱包
-2. **时间锁**: 升级操作应添加时间锁延迟
-3. **审计**: 部署前进行专业安全审计
-4. **监控**: 部署监控系统跟踪关键操作
-5. **应急预案**: 制定紧急情况处理流程
-
-### 权限分离
-
-- 不同角色应分配给不同的地址
-- 避免单点故障
-- 定期轮换密钥
-- 使用硬件钱包存储私钥
-
-## 合约信息
-
-- **Solidity 版本**: ^0.8.20
-- **代币精度**: 6 位小数（与 USDC 一致）
-- **代理模式**: UUPS (Universal Upgradeable Proxy Standard)
-- **依赖库**: OpenZeppelin Contracts Upgradeable v5.4.0
-
-## 测试
-
-合约包含完整的测试套件，覆盖以下场景：
-
-- 部署和初始化
-- 铸币和销毁
-- 转账和授权
-- 黑名单功能
-- 暂停机制
-- 供应量控制
-- 角色管理
-- 升级功能
-
-运行测试：
-
-```bash
-npx hardhat test
+contracts/
+├── contracts/
+│   ├── EscrowContract.sol      # 主合约
+│   ├── interfaces/
+│   │   └── IPermit2.sol        # Permit2接口
+│   └── mocks/
+│       ├── MockERC20.sol       # 测试用ERC20代币
+│       └── MockPermit2.sol     # 测试用Permit2合约
+├── scripts/
+│   └── deploy.js               # 部署脚本
+├── test/
+│   └── EscrowContract.test.js  # 测试文件
+└── README.md                   # 项目文档
 ```
 
 ## 许可证
 
 MIT License
-
-## 免责声明
-
-此合约仅供教学和参考使用，未经过专业安全审计。在生产环境中使用前，请务必进行全面的安全审计和测试。
