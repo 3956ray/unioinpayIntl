@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /**
  * @title RMBToken - 人民币代币合约 MVP版本
@@ -18,7 +19,7 @@ import "@openzeppelin/contracts/security/Pausable.sol";
  * - 紧急暂停功能
  * - 6位小数精度（符合人民币分单位）
  */
-contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
+contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable, ReentrancyGuard {
     
     // ============ 状态变量 ============
     
@@ -89,38 +90,46 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
     }
     
     /**
-     * @dev 转账函数重写，添加暂停检查
+     * @dev 转账函数重写，添加暂停检查和重入防护
      */
     function transfer(address to, uint256 amount) 
         public 
         override 
         whenNotPaused 
+        nonReentrant
         notZeroAddress(to)
         returns (bool) 
     {
+        require(amount > 0, "RMBToken: transfer amount must be greater than 0");
+        require(balanceOf(msg.sender) >= amount, "RMBToken: transfer amount exceeds balance");
         return super.transfer(to, amount);
     }
     
     /**
-     * @dev 授权转账函数重写，添加暂停检查
+     * @dev 授权转账函数重写，添加暂停检查和重入防护
      */
     function transferFrom(address from, address to, uint256 amount)
         public
         override
         whenNotPaused
+        nonReentrant
         notZeroAddress(to)
+        notZeroAddress(from)
         returns (bool)
     {
+        require(amount > 0, "RMBToken: transfer amount must be greater than 0");
+        require(balanceOf(from) >= amount, "RMBToken: transfer amount exceeds balance");
         return super.transferFrom(from, to, amount);
     }
     
     /**
-     * @dev 授权函数重写，添加暂停检查
+     * @dev 授权函数重写，添加暂停检查和重入防护
      */
     function approve(address spender, uint256 amount)
         public
         override
         whenNotPaused
+        nonReentrant
         notZeroAddress(spender)
         returns (bool)
     {
@@ -138,9 +147,11 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
         external 
         onlyMinter 
         whenNotPaused
+        nonReentrant
         notZeroAddress(to)
     {
         require(amount > 0, "RMBToken: mint amount must be greater than 0");
+        require(amount <= 1000000 * 10**decimals(), "RMBToken: mint amount exceeds maximum limit");
         
         _mint(to, amount);
         emit Mint(msg.sender, to, amount);
@@ -150,7 +161,7 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
      * @dev 销毁代币
      * @param amount 销毁数量
      */
-    function burn(uint256 amount) external whenNotPaused {
+    function burn(uint256 amount) external whenNotPaused nonReentrant {
         require(amount > 0, "RMBToken: burn amount must be greater than 0");
         require(balanceOf(msg.sender) >= amount, "RMBToken: burn amount exceeds balance");
         
@@ -167,6 +178,7 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
     function addMinter(address minter) 
         external 
         onlyOwner 
+        nonReentrant
         notZeroAddress(minter)
     {
         require(!minters[minter], "RMBToken: address is already a minter");
@@ -183,6 +195,7 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
     function removeMinter(address minter) 
         external 
         onlyOwner 
+        nonReentrant
         notZeroAddress(minter)
     {
         require(minters[minter], "RMBToken: address is not a minter");
@@ -218,7 +231,11 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
     function addMinters(address[] calldata minters_) 
         external 
         onlyOwner 
+        nonReentrant
     {
+        require(minters_.length > 0, "RMBToken: empty minters array");
+        require(minters_.length <= 50, "RMBToken: too many minters in batch");
+        
         for (uint256 i = 0; i < minters_.length; i++) {
             address minter = minters_[i];
             require(minter != address(0), "RMBToken: zero address");
@@ -235,15 +252,17 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable {
     /**
      * @dev 暂停合约（仅Owner）
      */
-    function pause() external onlyOwner {
+    function pause() external onlyOwner nonReentrant {
         _pause();
+        emit Paused(_msgSender());
     }
     
     /**
      * @dev 恢复合约（仅Owner）
      */
-    function unpause() external onlyOwner {
+    function unpause() external onlyOwner nonReentrant {
         _unpause();
+        emit Unpaused(_msgSender());
     }
     
     // ============ EIP-2612 Permit功能 ============
