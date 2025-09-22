@@ -1,0 +1,10 @@
+{
+  "name": "unioinpay-intl",
+  "version": "1.0.0",
+  "description": "RMB Token Project",
+  "private": true,
+  "workspaces": [
+    "contracts",
+    "frontend"
+  ]
+}

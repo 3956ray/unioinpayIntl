@@ -277,7 +277,7 @@ contract RMBToken is ERC20, ERC20Permit, Ownable, Pausable, ReentrancyGuard {
      * @return 域分离器哈希值
      */
     function getDomainSeparator() external view returns (bytes32) {
-        return DOMAIN_SEPARATOR();
+        return _domainSeparatorV4();
     }
     
     // ============ 查询功能 ============
